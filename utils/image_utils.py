@@ -11,15 +11,23 @@
 
 import torch
 
+
 def mse(img1, img2):
+    """L2 loss between two images."""
     return (((img1 - img2)) ** 2).view(img1.shape[0], -1).mean(1, keepdim=True)
 
+
 def psnr(img1, img2):
+    """Peak Signal-to-Noise Ratio between two images."""
     mse = (((img1 - img2)) ** 2).view(img1.shape[0], -1).mean(1, keepdim=True)
     return 20 * torch.log10(1.0 / torch.sqrt(mse))
 
+
 def easy_cmap(x: torch.Tensor):
-    x_rgb = torch.zeros((3, x.shape[0], x.shape[1]), dtype=torch.float32, device=x.device)
+    """ Converts a single-channel tensor to a 3-channel RGB tensor."""
+    x_rgb = torch.zeros((3, x.shape[0], x.shape[1]),
+                        dtype=torch.float32,
+                        device=x.device)
     x_max, x_min = x.max(), x.min()
     x_normalize = (x - x_min) / (x_max - x_min)
     x_rgb[0] = torch.clamp(x_normalize, 0, 1)

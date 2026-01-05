@@ -16,8 +16,10 @@ import numpy as np
 import random
 from pointops2.functions.pointops import furthestsampling, knnquery
 
+
 def inverse_sigmoid(x):
     return torch.log(x/(1-x))
+
 
 def PILtoTorch(pil_image, resolution):
     resized_image_PIL = pil_image.resize(resolution)
@@ -26,6 +28,7 @@ def PILtoTorch(pil_image, resolution):
         return resized_image.permute(2, 0, 1)
     else:
         return resized_image.unsqueeze(dim=-1).permute(2, 0, 1)
+
 
 def get_expon_lr_func(
     lr_init, lr_final, lr_delay_steps=0, lr_delay_mult=1.0, max_steps=1000000
@@ -62,6 +65,7 @@ def get_expon_lr_func(
 
     return helper
 
+
 def strip_lowerdiag(L):
     uncertainty = torch.zeros((L.shape[0], 6), dtype=torch.float, device="cuda")
 
@@ -73,8 +77,10 @@ def strip_lowerdiag(L):
     uncertainty[:, 5] = L[:, 2, 2]
     return uncertainty
 
+
 def strip_symmetric(sym):
     return strip_lowerdiag(sym)
+
 
 def build_rotation(r):
     norm = torch.sqrt(r[:,0]*r[:,0] + r[:,1]*r[:,1] + r[:,2]*r[:,2] + r[:,3]*r[:,3])
@@ -99,6 +105,7 @@ def build_rotation(r):
     R[:, 2, 2] = 1 - 2 * (x*x + y*y)
     return R
 
+
 def build_scaling_rotation(s, r):
     L = torch.zeros((s.shape[0], 3, 3), dtype=torch.float, device="cuda")
     R = build_rotation(r)
@@ -109,6 +116,7 @@ def build_scaling_rotation(s, r):
 
     L = L @ R
     return L
+
 
 def build_rotation_4d(l, r):
     l_norm = torch.norm(l, dim=-1, keepdim=True)
@@ -132,6 +140,7 @@ def build_rotation_4d(l, r):
     A = A.flip(1,2)
     return A
 
+
 def build_scaling_rotation_4d(s, l, r):
     L = torch.zeros((s.shape[0], 4, 4), dtype=torch.float, device="cuda")
     R = build_rotation_4d(l, r)
@@ -143,6 +152,7 @@ def build_scaling_rotation_4d(s, l, r):
 
     L = R @ L
     return L
+
 
 def safe_state(silent):
     old_f = sys.stdout
@@ -166,7 +176,8 @@ def safe_state(silent):
     np.random.seed(0)
     torch.manual_seed(0)
     torch.cuda.set_device(torch.device("cuda:0"))
-    
+
+
 def knn(x, src, k, transpose=False):
     if transpose:
         x = x.transpose(1, 2).contiguous()
@@ -182,7 +193,8 @@ def knn(x, src, k, transpose=False):
     idx, dists = knnquery(k, src, x, src_offset, x_offset)
     idx = idx.view(b, n, k) - (src_offset - m)[:, None, None]
     return idx.long(), dists.view(b, n, k)
-    
+
+
 def fps(x, k):
     b, n, _ = x.shape
     x = x.view(-1, 3).contiguous()

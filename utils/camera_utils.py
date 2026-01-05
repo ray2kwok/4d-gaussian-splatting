@@ -19,6 +19,7 @@ import cv2
 
 WARNED = False
 
+
 def loadCam(args, id, cam_info, resolution_scale):
     orig_w, orig_h = cam_info.width, cam_info.height# cam_info.image.size
 
@@ -41,12 +42,12 @@ def loadCam(args, id, cam_info, resolution_scale):
 
         scale = float(global_down) * float(resolution_scale)
         resolution = (int(orig_w / scale), int(orig_h / scale))
-    
+
     cx = cam_info.cx / scale
     cy = cam_info.cy / scale
     fl_y = cam_info.fl_y / scale
     fl_x = cam_info.fl_x / scale
-    
+
     loaded_mask = None
     if not args.dataloader:
         resized_image_rgb = PILtoTorch(cam_info.image, resolution)
@@ -56,7 +57,7 @@ def loadCam(args, id, cam_info, resolution_scale):
             loaded_mask = resized_image_rgb[3:4, ...]
     else:
         gt_image = cam_info.image
-    
+
     if cam_info.depth is not None:
         depth = PILtoTorch(cam_info.depth, resolution) * 255 / 10000
     else:
@@ -113,6 +114,7 @@ def loadCam(args, id, cam_info, resolution_scale):
                   pts_depth=pts_depth, sky_mask=sky_mask,
                   )
 
+
 def cameraList_from_camInfos(cam_infos, resolution_scale, args):
     camera_list = []
 
@@ -121,7 +123,8 @@ def cameraList_from_camInfos(cam_infos, resolution_scale, args):
 
     return camera_list
 
-def camera_to_JSON(id, camera : Camera):
+
+def camera_to_JSON(id, camera: Camera):
     Rt = np.zeros((4, 4))
     Rt[:3, :3] = camera.R.transpose()
     Rt[:3, 3] = camera.T
@@ -132,13 +135,13 @@ def camera_to_JSON(id, camera : Camera):
     rot = W2C[:3, :3]
     serializable_array_2d = [x.tolist() for x in rot]
     camera_entry = {
-        'id' : id,
-        'img_name' : camera.image_name,
-        'width' : camera.width,
-        'height' : camera.height,
+        'id': id,
+        'img_name': camera.image_name,
+        'width': camera.width,
+        'height': camera.height,
         'position': pos.tolist(),
         'rotation': serializable_array_2d,
-        'fy' : fov2focal(camera.FovY, camera.height),
-        'fx' : fov2focal(camera.FovX, camera.width)
+        'fy': fov2focal(camera.FovY, camera.height),
+        'fx': fov2focal(camera.FovX, camera.width)
     }
     return camera_entry

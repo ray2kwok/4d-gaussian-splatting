@@ -9,22 +9,28 @@
 # For inquiries contact  george.drettakis@inria.fr
 #
 
-import torch
-from torch.nn import functional as F
 import math
-from .diff_gaussian_rasterization import GaussianRasterizationSettings, GaussianRasterizer
+import torch
+
+from .diff_gaussian_rasterization import (
+    GaussianRasterizationSettings,
+    GaussianRasterizer
+)
 from scene.gaussian_model import GaussianModel
 from utils.sh_utils import eval_sh, eval_shfs_4d
 
-def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, scaling_modifier = 1.0, override_color = None,
-           time_shift=None):
+
+def render(viewpoint_camera, pc: GaussianModel,
+           pipe, bg_color: torch.Tensor,
+           scaling_modifier=1.0, override_color=None, time_shift=None):
     """
-    Render the scene. 
+    Render the scene.
     
     Background tensor (bg_color) must be on GPU!
     """
     if time_shift is not None:
         viewpoint_camera.timestamp -= time_shift
+
     # Create zero tensor. We will use it to make pytorch return gradients of the 2D (screen-space) means
     screenspace_points = torch.zeros_like(pc.get_xyz, dtype=pc.get_xyz.dtype, requires_grad=True, device="cuda") + 0
     try:
@@ -35,7 +41,6 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     # Set up rasterization configuration
     tanfovx = math.tan(viewpoint_camera.FoVx * 0.5)
     tanfovy = math.tan(viewpoint_camera.FoVy * 0.5)
-
     raster_settings = GaussianRasterizationSettings(
         image_height=int(viewpoint_camera.image_height),
         image_width=int(viewpoint_camera.image_width),
@@ -56,7 +61,6 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
         prefiltered=False,
         debug=pipe.debug
     )
-
     rasterizer = GaussianRasterizer(raster_settings=raster_settings)
 
     means3D = pc.get_xyz
@@ -64,12 +68,12 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     opacity = pc.get_opacity
 
     # If precomputed 3d covariance is provided, use it. If not, then it will be computed from
-    # scaling / rotation by the rasterizer.
+    # scaling / rotation by the rasterizer
+    ts = None
     scales = None
     scales_t = None
     rotations = None
     rotations_r = None
-    ts = None
     cov3D_precomp = None
     if pipe.compute_cov3D_python:
         if pc.rot_4d:
@@ -114,12 +118,11 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
                 ts = pc.get_t
     else:
         colors_precomp = override_color
-    
-    flow_2d = torch.zeros_like(pc.get_xyz[:,:2])
-    
-    # Prefilter
+
+    flow_2d = torch.zeros_like(pc.get_xyz[:, :2])
     if pipe.compute_cov3D_python and pc.gaussian_dim == 4:
-        mask = marginal_t[:,0] > 0.05
+        # Prefilter
+        mask = marginal_t[:, 0] > 0.05
         if means2D is not None:
             means2D = means2D[mask]
         if means3D is not None:
@@ -144,30 +147,30 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
             cov3D_precomp = cov3D_precomp[mask]
         if flow_2d is not None:
             flow_2d = flow_2d[mask]
-    
-    # Rasterize visible Gaussians to image, obtain their radii (on screen). 
+
+    # Rasterize visible Gaussians to image, obtain their radii (on screen).
     rendered_image, radii, depth, alpha, flow, covs_com = rasterizer(
-        means3D = means3D,
-        means2D = means2D,
-        shs = shs,
-        colors_precomp = colors_precomp,
-        flow_2d = flow_2d,
-        opacities = opacity,
-        ts = ts,
-        scales = scales,
-        scales_t = scales_t,
-        rotations = rotations,
-        rotations_r = rotations_r,
-        cov3D_precomp = cov3D_precomp)
-    
-    
+        means3D=means3D,
+        means2D=means2D,
+        shs=shs,
+        colors_precomp=colors_precomp,
+        flow_2d=flow_2d,
+        opacities=opacity,
+        ts=ts,
+        scales=scales,
+        scales_t=scales_t,
+        rotations=rotations,
+        rotations_r=rotations_r,
+        cov3D_precomp=cov3D_precomp
+    )
+
     if pipe.env_map_res > 0:
         rendered_image_before = rendered_image
         assert pc.env_map is not None
         rays_d = viewpoint_camera.get_world_directions().permute(1, 2, 0)
         bg_color_from_envmap = pc.env_map.query_cube(rays_d).permute(2, 0, 1)
         rendered_image = rendered_image + (1 - alpha) * bg_color_from_envmap
-    
+
     if pipe.compute_cov3D_python and pc.gaussian_dim == 4:
         radii_all = radii.new_zeros(mask.shape)
         radii_all[mask] = radii
@@ -181,7 +184,7 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     # They will be excluded from value updates used in the splitting criteria.
     return {"render": rendered_image,
             "viewspace_points": screenspace_points,
-            "visibility_filter" : radii_all > 0,
+            "visibility_filter": radii_all > 0,
             "radii": radii_all,
             "depth": depth,
             "alpha": alpha,

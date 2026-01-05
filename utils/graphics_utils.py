@@ -14,13 +14,17 @@ import math
 import numpy as np
 from typing import NamedTuple
 
+
 class BasicPointCloud(NamedTuple):
-    points : np.array
-    colors : np.array
-    normals : np.array
-    time : np.array = None
+    """ Basic point cloud structure. """
+    points: np.array
+    colors: np.array
+    normals: np.array
+    time: np.array = None
+
 
 def geom_transform_points(points, transf_matrix):
+    """ Apply a 4x4 transformation matrix to 3D points. """
     P, _ = points.shape
     ones = torch.ones(P, 1, dtype=points.dtype, device=points.device)
     points_hom = torch.cat([points, ones], dim=1)
@@ -29,14 +33,18 @@ def geom_transform_points(points, transf_matrix):
     denom = points_out[..., 3:] + 0.0000001
     return (points_out[..., :3] / denom).squeeze(dim=0)
 
+
 def getWorld2View(R, t):
+    """ Get world to view matrix. """
     Rt = np.zeros((4, 4))
     Rt[:3, :3] = R.transpose()
     Rt[:3, 3] = t
     Rt[3, 3] = 1.0
     return np.float32(Rt)
 
+
 def getWorld2View2(R, t, translate=np.array([.0, .0, .0]), scale=1.0):
+    """ Get world to view matrix with scaling and translation. """
     Rt = np.zeros((4, 4))
     Rt[:3, :3] = R.transpose()
     Rt[:3, 3] = t
@@ -49,7 +57,9 @@ def getWorld2View2(R, t, translate=np.array([.0, .0, .0]), scale=1.0):
     Rt = np.linalg.inv(C2W)
     return np.float32(Rt)
 
+
 def getProjectionMatrix(znear, zfar, fovX, fovY):
+    """ Get projection matrix from field of view. """
     tanHalfFovY = math.tan((fovY / 2))
     tanHalfFovX = math.tan((fovX / 2))
 
@@ -71,7 +81,9 @@ def getProjectionMatrix(znear, zfar, fovX, fovY):
     P[2, 3] = -(zfar * znear) / (zfar - znear)
     return P
 
+
 def getProjectionMatrixCenterShift(znear, zfar, cx, cy, fl_x, fl_y, w, h):
+    """ Get projection matrix with principal point offset. """
     top = cy / fl_y * znear
     bottom = -(h-cy) / fl_y * znear
     
@@ -91,8 +103,12 @@ def getProjectionMatrixCenterShift(znear, zfar, cx, cy, fl_x, fl_y, w, h):
     P[2, 3] = -(zfar * znear) / (zfar - znear)
     return P
 
+
 def fov2focal(fov, pixels):
+    """ Converts field of view to focal length. """
     return pixels / (2 * math.tan(fov / 2))
 
+
 def focal2fov(focal, pixels):
+    """ Converts focal length to field of view. """
     return 2*math.atan(pixels/(2*focal))
