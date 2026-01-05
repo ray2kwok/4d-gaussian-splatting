@@ -43,10 +43,12 @@ class FakeQuantizationHalf(torch.autograd.Function):
 
     @staticmethod
     def forward(_, x: torch.Tensor) -> torch.Tensor:
+        """ Simulate half-precision quantization during the forward pass. """
         return x.half().float()
 
     @staticmethod
     def backward(_, grad_output: torch.Tensor) -> torch.Tensor:
+        """ Pass gradients unchanged during the backward pass. """
         return grad_output
 
 
@@ -492,7 +494,6 @@ class GaussianModel:
                   + self.time_duration[0]
             else:
                 fused_times = torch.from_numpy(pcd.time).cuda().float()
-            
         print("Number of points at initialisation : ", fused_point_cloud.shape[0])
 
         dist2 = torch.clamp_min(
@@ -575,7 +576,7 @@ class GaussianModel:
         self._rotation = nn.Parameter(rots.requires_grad_(True))
         self._opacity = nn.Parameter(opacities.requires_grad_(True))
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
-        
+
         self._t = nn.Parameter(fused_times.requires_grad_(True))
         self._scaling_t = nn.Parameter(scales_t.requires_grad_(True))
         self._rotation_r = nn.Parameter(rots_r.requires_grad_(True))
@@ -588,7 +589,7 @@ class GaussianModel:
         )
         self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
 
-        l = [
+        params = [
             {
                 'params': [self._xyz],
                 'lr': (
@@ -630,7 +631,7 @@ class GaussianModel:
             self.t_gradient_accum = torch.zeros(
                 (self.get_xyz.shape[0], 1), device="cuda"
             )
-            l.append({
+            params.append({
                 'params': [self._t],
                 'lr': (
                         training_args.position_t_lr_init
@@ -638,19 +639,19 @@ class GaussianModel:
                 ),
                 "name": "t"
             })
-            l.append({
+            params.append({
                 'params': [self._scaling_t],
                 'lr': training_args.scaling_t_lr,
                 "name": "scaling_t"
             })
             if self.rot_4d:
-                l.append({
+                params.append({
                     'params': [self._rotation_r],
                     'lr': training_args.rotation_lr,
                     "name": "rotation_r"
                 })
 
-        self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15)
+        self.optimizer = torch.optim.Adam(params, lr=0.0, eps=1e-15)
         self.xyz_scheduler_args = get_expon_lr_func(
             lr_init=training_args.position_lr_init*self.spatial_lr_scale,
             lr_final=training_args.position_lr_final*self.spatial_lr_scale,
@@ -807,12 +808,15 @@ class GaussianModel:
                 optimizable_tensors[group["name"]] = group["params"][0]
         return optimizable_tensors
 
-    def densification_postfix(self, new_xyz,
+    def densification_postfix(self,
+                              new_xyz,
                               new_features_dc,
                               new_features_rest,
                               new_opacities,
-                              new_scaling, new_rotation, 
-                              new_t, new_scaling_t, new_rotation_r):
+                              new_scaling,
+                              new_rotation,
+                              new_t, new_scaling_t,
+                              new_rotation_r):
         """ Post-process after densification of points. """
         d = {"xyz": new_xyz,
              "f_dc": new_features_dc,
@@ -852,7 +856,8 @@ class GaussianModel:
                           grads,
                           grad_threshold,
                           scene_extent,
-                          grads_t, grad_t_threshold,
+                          grads_t,
+                          grad_t_threshold,
                           N=2):
         """ Densify and split points based on gradient conditions. """
         n_init_points = self.get_xyz.shape[0]
@@ -950,8 +955,12 @@ class GaussianModel:
         ))
         self.prune_points(prune_filter)
 
-    def densify_and_clone(self, grads, grad_threshold,
-                          scene_extent, grads_t, grad_t_threshold):
+    def densify_and_clone(self,
+                          grads,
+                          grad_threshold,
+                          scene_extent,
+                          grads_t,
+                          grad_t_threshold):
         """ Densify and clone points based on gradient conditions. """
         # Extract points that satisfy the gradient condition
         selected_pts_mask = torch.where(
@@ -965,7 +974,7 @@ class GaussianModel:
             ).values <= self.percent_dense*scene_extent
         )
         # print(f"num_to_densify_pos: {torch.where(grads >= grad_threshold, True, False).sum()}, num_to_clone_pos: {selected_pts_mask.sum()}")
-        
+
         new_xyz = self._xyz[selected_pts_mask]
         new_features_dc = self._features_dc[selected_pts_mask]
         new_features_rest = self._features_rest[selected_pts_mask]
@@ -1032,7 +1041,6 @@ class GaussianModel:
                 big_points_ws
             )
         self.prune_points(prune_mask)
-
         torch.cuda.empty_cache()
 
     def add_densification_stats(self,
@@ -1152,7 +1160,7 @@ class GaussianModel:
                         ema_update=False,
                         learnable_codebook=True, 
                         in_place_codebook_optimizer=lambda *args,
-                        **kwargs:torch.optim.Adam(*args, **kwargs, lr=0.0001)
+                        **kwargs: torch.optim.Adam(*args, **kwargs, lr=0.0001)
                 ).cuda()
                 for _ in tqdm(range(self.rvq_iter_features_rest - 1)):
                     _, _, _ = self.vq_features_rest_model(
@@ -1168,8 +1176,7 @@ class GaussianModel:
                         for p in self.vq_features_rest_model.parameters()
                     ],
                     'lr': (
-                            training_args.feature_lr
-                            / 20.0 
+                            training_args.feature_lr / 20.0
                             * finetuning_lr_scale
                     ),
                     "name": "vq_features_rest"
@@ -1275,10 +1282,10 @@ class GaussianModel:
                     **kwargs: torch.optim.Adam(*args, **kwargs, lr=0.0008)
                 ).cuda()
                 for _ in tqdm(range(self.rvq_iter_rotation - 1)):
-                    _, _, _ = self.vq_rotation_model(rotation_params.unsqueeze(0))
-                _, rvq_indices_rotation, _ = self.vq_rotation_model(
-                    rotation_params.unsqueeze(0)
-                )
+                    _, _, _ = \
+                        self.vq_rotation_model(rotation_params.unsqueeze(0))
+                _, rvq_indices_rotation, _ = \
+                    self.vq_rotation_model(rotation_params.unsqueeze(0))
                 self.rvq_indices_rotation, self.rvq_indices_rotation_r = \
                     rvq_indices_rotation.split(self._xyz.shape[0], dim=1)
                 codebook_params.append({

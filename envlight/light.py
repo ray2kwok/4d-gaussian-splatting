@@ -4,10 +4,23 @@ import torchvision.transforms.functional
 
 from . import renderutils as ru
 from .utils import *
+import nvdiffrast.torch as dr
+
 
 class EnvLight(torch.nn.Module):
+    """ Environment light represented as a cubemap with mip-mapping for different roughness levels. """
 
-    def __init__(self, path=None, device=None, scale=1.0, min_res=8, start_res=32, max_res=512, min_roughness=0.08, max_roughness=0.5, trainable=False):
+    def __init__(self,
+                 path=None,
+                 device=None,
+                 scale=1.0,
+                 min_res=8,
+                 start_res=32,
+                 max_res=512,
+                 min_roughness=0.08,
+                 max_roughness=0.5,
+                 trainable=False):
+        """ Initialize the EnvLight with given parameters. """
         super().__init__()
         self.device = device if device is not None else 'cuda'  # only supports cuda
         self.scale = scale  # scale of the hdr values
@@ -17,12 +30,18 @@ class EnvLight(torch.nn.Module):
         self.min_roughness = min_roughness
         self.max_roughness = max_roughness
         self.trainable = trainable
-        self.to_opengl = torch.tensor([[1, 0, 0], [0, 0, 1], [0, -1, 0]], dtype=torch.float32, device="cuda")
+        self.to_opengl = torch.tensor(
+            [[1, 0, 0], [0, 0, 1], [0, -1, 0]],
+            dtype=torch.float32,
+            device="cuda")
 
         # init an empty cubemap
         self.base = torch.nn.Parameter(
-            0.5 * torch.ones(6, self.current_res, self.current_res, 3,
-                             dtype=torch.float32, device=self.device, requires_grad=self.trainable),
+            0.5 * torch.ones(6, self.current_res,
+                             self.current_res, 3,
+                             dtype=torch.float32,
+                             device=self.device,
+                             requires_grad=self.trainable),
         )
         # try to load from file
         if path is not None:
@@ -44,17 +63,24 @@ class EnvLight(torch.nn.Module):
             image = image.astype(np.float32) / 255
         image = torch.from_numpy(image).to(self.device) * self.scale
         self.image = image
-        cubemap = latlong_to_cubemap(image, [self.current_res, self.current_res], self.device)
+        cubemap = latlong_to_cubemap(
+            image,
+            [self.current_res, self.current_res],
+            self.device)
 
         self.base.data = cubemap
 
     def upsample(self):
         if self.current_res < self.max_res:
             self.current_res *= 2
-            self.base = torch.nn.Parameter(torchvision.transforms.functional.resize(
-                self.base.data.permute(0, 3, 1, 2), [self.current_res, self.current_res], antialias=True).permute(0, 2,
-                                                                                                                  3, 1),
-                                           requires_grad=True)
+            self.base = torch.nn.Parameter(
+                torchvision.transforms.functional.resize(
+                    self.base.data.permute(0, 3, 1, 2),
+                    [self.current_res, self.current_res],
+                    antialias=True
+                ).permute(0, 2, 3, 1),
+                requires_grad=True
+            )
             print(f"Upsampling resolution to {self.current_res} !!!")
 
     def get_envmap_from_base(self):
@@ -77,7 +103,11 @@ class EnvLight(torch.nn.Module):
         tv = torch.acos(torch.clamp(v[..., 1:2], min=-1, max=1)) / np.pi
         # import pdb;pdb.set_trace()
         texcoord = torch.cat((tu, tv), dim=-1)
-        light = dr.texture(self.envmap[None, ...], texcoord[None, None, ...], filter_mode='linear')[0, 0]
+        light = dr.texture(
+            self.envmap[None, ...],
+            texcoord[None, None, ...],
+            filter_mode='linear'
+        )[0, 0]
         # light = light / (light + 1)
         # light = light.clamp(0, 1)
         return light.reshape(*shape)
