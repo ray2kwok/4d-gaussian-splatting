@@ -5,7 +5,9 @@ from tqdm import tqdm
 from mmseg.apis import inference_model, init_model
 import argparse
 
+
 def parse_args():
+    """ Parse command line arguments. """
     parser = argparse.ArgumentParser(description='Waymo vis with SegFormer')
     parser.add_argument(
         '--config',
@@ -26,6 +28,7 @@ def parse_args():
         help='Root directory for kitti-format waymo scenes'
     )
     return parser.parse_args()
+
 
 if __name__ == "__main__":
     args = parse_args()

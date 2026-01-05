@@ -2,8 +2,15 @@ import os
 import numpy as np
 from tqdm import tqdm
 from PIL import Image
-from scene.dataset_readers import CameraInfo, SceneInfo, getNerfppNorm, fetchPly, storePly
+from scene.dataset_readers import (
+    CameraInfo,
+    SceneInfo,
+    getNerfppNorm,
+    fetchPly,
+    storePly
+)
 from utils.graphics_utils import BasicPointCloud
+
 
 def pad_poses(p):
     """Pad [..., 3, 4] pose matrices with a homogeneous bottom row [0,0,0,1]."""
@@ -19,13 +26,13 @@ def unpad_poses(p):
 def transform_poses_pca(poses):
     """Transforms poses so principal components lie on XYZ axes.
 
-  Args:
-    poses: a (N, 3, 4) array containing the cameras' camera to world transforms.
+    Args:
+        poses: a (N, 3, 4) array containing the cameras' camera to world transforms.
 
-  Returns:
-    A tuple (poses, transform), with the transformed poses and the applied
-    camera_to_world transforms.
-  """
+    Returns:
+        A tuple (poses, transform), with the transformed poses and the applied
+        camera_to_world transforms.
+    """
     t = poses[:, :3, 3]
     t_mean = t.mean(axis=0)
     t = t - t_mean
@@ -57,13 +64,23 @@ def transform_poses_pca(poses):
     return poses_recentered, transform, scale_factor
 
 
-def readWaymoInfo(path, eval, extension=".png", num_pts=1000_000,
+def readWaymoInfo(path,
+                  eval,
+                  extension=".png",
+                  num_pts=1000_000,
                   time_duration=None, 
                   testhold=4, cam_num=3,
                   start_frame=0,
                   end_frame=50):
+    """ Read Waymo dataset information. """
     cam_infos = []
-    car_list = [f[:-4] for f in sorted(os.listdir(os.path.join(path, "calib"))) if f.endswith('.txt')][start_frame:end_frame]
+    car_list = [
+        f[:-4]
+        for f in sorted(
+            os.listdir(os.path.join(path, "calib"))
+        )
+        if f.endswith('.txt')
+    ][start_frame:end_frame]
     points = []
     points_time = []
     for idx, car_id in tqdm(enumerate(car_list), desc="Loading data"):
@@ -72,7 +89,10 @@ def readWaymoInfo(path, eval, extension=".png", num_pts=1000_000,
         # CAMERA DIRECTION: RIGHT DOWN FORWARDS
         with open(os.path.join(path, 'calib', car_id + '.txt')) as f:
             calib_data = f.readlines()
-            L = [list(map(float, line.split()[1:])) for line in calib_data]
+            L = [
+                list(map(float, line.split()[1:]))
+                for line in calib_data
+            ]
         Ks = np.array(L[:5]).reshape(-1, 3, 4)[:, :, :3]
         lidar2cam = np.array(L[-5:]).reshape(-1, 3, 4)
         lidar2cam = pad_poses(lidar2cam)
@@ -80,10 +100,13 @@ def readWaymoInfo(path, eval, extension=".png", num_pts=1000_000,
         cam2lidar = np.linalg.inv(lidar2cam)
         c2w = ego_pose @ cam2lidar
         w2c = np.linalg.inv(c2w)
+
+        HWs = []
         images = []
         image_paths = []
-        HWs = []
-        for subdir in ['image_0', 'image_1', 'image_2', 'image_3', 'image_4'][:cam_num]:
+        for subdir in [
+            'image_0', 'image_1', 'image_2', 'image_3', 'image_4'
+        ][:cam_num]:
             image_path = os.path.join(path, subdir, car_id + extension)
             im_data = Image.open(image_path)
             W, H = im_data.size
@@ -93,21 +116,37 @@ def readWaymoInfo(path, eval, extension=".png", num_pts=1000_000,
 
         sky_masks = []
         for subdir in ['sky_0', 'sky_1', 'sky_2', 'sky_3', 'sky_4'][:cam_num]:
-            sky_data = np.array(Image.open(os.path.join(path, subdir, car_id + extension)))
-            sky_mask = sky_data>0
+            sky_data = np.array(
+                Image.open(os.path.join(path, subdir, car_id + extension))
+            )
+            sky_mask = sky_data > 0
             sky_masks.append(sky_mask.astype(np.float32))
 
-        timestamp = time_duration[0] + (time_duration[1] - time_duration[0]) * idx / (len(car_list) - 1)
+        timestamp = (
+            time_duration[0] +
+            (
+                time_duration[1] - time_duration[0]
+            ) * idx / (len(car_list) - 1)
+        )
         point = np.fromfile(os.path.join(path, "velodyne", car_id + ".bin"),
                             dtype=np.float32, count=-1).reshape(-1, 6)
-        point_xyz, intensity, elongation, timestamp_pts = np.split(point, [3, 4, 5], axis=1)
-        point_xyz_world = (np.pad(point_xyz, (0, 1), constant_values=1) @ ego_pose.T)[:, :3]
+        point_xyz, intensity, elongation, timestamp_pts = \
+            np.split(point, [3, 4, 5], axis=1)
+        point_xyz_world = (
+            np.pad(point_xyz, (0, 1), constant_values=1) @ ego_pose.T
+        )[:, :3]
         points.append(point_xyz_world)
         point_time = np.full_like(point_xyz_world[:, :1], timestamp)
         points_time.append(point_time)
         for j in range(cam_num):
             mask = np.logical_and(intensity[:, 0] > 0.00001, elongation[:, 0] < 1)
-            point_camera = (np.pad(point_xyz[mask], ((0, 0), (0, 1)), constant_values=1) @ lidar2cam[j].T)[:, :3]
+            point_camera = (
+                np.pad(
+                    point_xyz[mask],
+                    ((0, 0), (0, 1)),
+                    constant_values=1
+                ) @ lidar2cam[j].T
+            )[:, :3]
             R = np.transpose(w2c[j, :3, :3])  # R is stored transposed due to 'glm' in CUDA code
             T = w2c[j, :3, 3]
             K = Ks[j]
@@ -116,12 +155,22 @@ def readWaymoInfo(path, eval, extension=".png", num_pts=1000_000,
             cx = float(K[0, 2])
             cy = float(K[1, 2])
             FovX = FovY = -1.0
-            cam_infos.append(CameraInfo(uid=idx * 5 + j, R=R, T=T, FovY=FovY, FovX=FovX,
-                                        image=images[j], depth=None,
-                                        image_path=image_paths[j], image_name=car_id,
-                                        width=HWs[j][1], height=HWs[j][0], timestamp=timestamp,
-                                        fl_x=fl_x, fl_y=fl_y, cx=cx, cy=cy,
-                                        sky_mask=sky_masks[j], pointcloud_camera=point_camera))
+            cam_infos.append(CameraInfo(uid=idx * 5 + j,
+                                        R=R, T=T,
+                                        FovY=FovY, FovX=FovX,
+                                        image=images[j],
+                                        depth=None,
+                                        image_path=image_paths[j],
+                                        image_name=car_id,
+                                        width=HWs[j][1],
+                                        height=HWs[j][0],
+                                        timestamp=timestamp,
+                                        fl_x=fl_x,
+                                        fl_y=fl_y,
+                                        cx=cx,
+                                        cy=cy,
+                                        sky_mask=sky_masks[j],
+                                        pointcloud_camera=point_camera))
 
 
     pointcloud = np.concatenate(points, axis=0)
@@ -146,10 +195,20 @@ def readWaymoInfo(path, eval, extension=".png", num_pts=1000_000,
         cam_info.T[:] = w2c[:3, 3]
         # cam_info.depth[cam_info.depth != 1000] *= scale_factor
         cam_info.pointcloud_camera[:] *= scale_factor
-    pointcloud = (np.pad(pointcloud, ((0, 0), (0, 1)), constant_values=1) @ transform.T)[:, :3]
+    pointcloud = (
+        np.pad(pointcloud, ((0, 0), (0, 1)), constant_values=1) @ transform.T
+    )[:, :3]
     if eval:
-        train_cam_infos = [c for idx, c in enumerate(cam_infos) if (idx // cam_num + 1) % testhold != 0]
-        test_cam_infos = [c for idx, c in enumerate(cam_infos) if (idx // cam_num + 1) % testhold == 0]
+        train_cam_infos = [
+            c
+            for idx, c in enumerate(cam_infos)
+            if (idx // cam_num + 1) % testhold != 0
+        ]
+        test_cam_infos = [
+            c
+            for idx, c in enumerate(cam_infos)
+            if (idx // cam_num + 1) % testhold == 0
+        ]
     else:
         train_cam_infos = cam_infos
         test_cam_infos = []
@@ -164,12 +223,16 @@ def readWaymoInfo(path, eval, extension=".png", num_pts=1000_000,
     except:
         pcd = None
 
-    pcd = BasicPointCloud(pointcloud, colors=np.zeros([pointcloud.shape[0],3]), normals=None, time=pointcloud_timestamp)
+    pcd = BasicPointCloud(
+        pointcloud,
+        colors=np.zeros([pointcloud.shape[0], 3]),
+        normals=None, time=pointcloud_timestamp
+    )
 
-    scene_info = SceneInfo(point_cloud=pcd,
-                           train_cameras=train_cam_infos,
-                           test_cameras=test_cam_infos,
-                           nerf_normalization=nerf_normalization,
-                           ply_path=ply_path)
-
+    scene_info = SceneInfo(
+        point_cloud=pcd,
+        train_cameras=train_cam_infos,
+        test_cameras=test_cam_infos,
+        nerf_normalization=nerf_normalization,
+        ply_path=ply_path)
     return scene_info

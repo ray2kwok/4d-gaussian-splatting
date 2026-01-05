@@ -68,10 +68,9 @@ def getProjectionMatrix(znear, zfar, fovX, fovY):
     right = tanHalfFovX * znear
     left = -right
 
-    P = torch.zeros(4, 4)
-
     z_sign = 1.0
 
+    P = torch.zeros(4, 4)
     P[0, 0] = 2.0 * znear / (right - left)
     P[1, 1] = 2.0 * znear / (top - bottom)
     P[0, 2] = (right + left) / (right - left)
@@ -86,14 +85,12 @@ def getProjectionMatrixCenterShift(znear, zfar, cx, cy, fl_x, fl_y, w, h):
     """ Get projection matrix with principal point offset. """
     top = cy / fl_y * znear
     bottom = -(h-cy) / fl_y * znear
-    
     left = -(w-cx) / fl_x * znear
     right = cx / fl_x * znear
 
-    P = torch.zeros(4, 4)
-
     z_sign = 1.0
 
+    P = torch.zeros(4, 4)
     P[0, 0] = 2.0 * znear / (right - left)
     P[1, 1] = 2.0 * znear / (top - bottom)
     P[0, 2] = (right + left) / (right - left)
